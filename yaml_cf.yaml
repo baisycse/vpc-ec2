@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Amazon EKS Sample VPC - Private and Public subnets
+Parameters:
+  VpcBlock:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: >-
+      The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR
+      range.
+  PublicSubnet01Block:
+    Type: String
+    Default: 10.1.0.0/24
+    Description: CidrBlock for public subnet within the VPC
+  PrivateSubnet01Block:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CidrBlock for private subnet within the VPC
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VpcBlock
+          - PublicSubnetBlock
+          - PrivateSubnetBlock
+
+Resources:
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VpcBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 10d5a61b-85ca-461d-b898-d8408dd78569
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Public Subnets
+
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Private Subnets
+
+  PublicRoute:
+    DependsOn: VPCGatewayAttachment
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 11cc8f1f-f948-459e-8863-dac0d442025f
+  PrivateRoute:
+    DependsOn:
+      - VPCGatewayAttachment
+      - NatGateway
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  NatGateway:
+    DependsOn:
+      - PublicSubnet
+      - VPCGatewayAttachment
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref PublicSubnet
+
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        'Fn::Select':
+          - '0'
+          - 'Fn::GetAZs':
+              Ref: 'AWS::Region'
+      CidrBlock:
+        Ref: PublicSubnetBlock
+      VpcId: !Ref VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 4fa2b8dc-5414-42ae-85f6-a335d33af234
+  PrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone:
+        'Fn::Select':
+          - '1'
+          - 'Fn::GetAZs':
+              Ref: 'AWS::Region'
+      CidrBlock:
+        Ref: PrivateSubnetBlock
+      VpcId:
+        Ref: VPC
+
+  PublicSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: c37be442-1c72-4cd1-a4f6-38bc901a17a2
+  MyEC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-79fd7eee
+      NetworkInterfaces:
+        - SubnetId: !Ref PublicSubnet
+      SecurityGroups: !Ref Securitygrouppub
+  MyEC2Instancewq:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-79fd7eee
+      NetworkInterfaces:
+        - SubnetId: !Ref PrivateSubnet
+      SecurityGroups: !Ref Securitygrouppri
+
+  Securitygrouppub:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+
+  Securitygrouppri:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 10.0.0.0/16
+
+
